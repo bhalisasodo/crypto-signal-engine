@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import make_scorer
 
 from data.ingestion.binance_client import BinanceClient
 from data.processing.dataset import build_sequence_dataset, train_test_split_sequences
@@ -85,6 +87,56 @@ def evaluate_model(model, scaler, X, y, device="cpu"):
     return mse, direction
 
 
+def cross_validate_nn(X, y, seq_len, device="cpu", n_splits=5, epochs=20, batch_size=64, lr=1e-3):
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    scores = []
+    for train_index, test_index in tscv.split(X):
+        X_train_cv, X_test_cv = X[train_index], X[test_index]
+        y_train_cv, y_test_cv = y[train_index], y[test_index]
+        scaler_cv = FeatureScaler()
+        scaler_cv.fit(X_train_cv)
+        X_train_scaled = scaler_cv.transform(X_train_cv)
+        X_test_scaled = scaler_cv.transform(X_test_cv)
+        model = PricePredictor(input_size=X.shape[2], seq_len=seq_len)
+        model = train_nn(model, X_train_scaled, y_train_cv, epochs=epochs, batch_size=batch_size, lr=lr, device=device)
+        _, direction = evaluate_model(model, scaler_cv, X_test_cv, y_test_cv, device=device)
+        scores.append(direction)
+    return np.mean(scores), np.std(scores)
+
+
+def tune_nn_hyperparams(X, y, seq_len, device="cpu", param_grid=None):
+    if param_grid is None:
+        param_grid = {'lr': [1e-4, 1e-3], 'epochs': [10, 20], 'batch_size': [64]}
+    best_score = -np.inf
+    best_params = None
+    for lr in param_grid['lr']:
+        for epochs in param_grid['epochs']:
+            for batch_size in param_grid['batch_size']:
+                score, _ = cross_validate_nn(X, y, seq_len, device, epochs=epochs, batch_size=batch_size, lr=lr)
+                if score > best_score:
+                    best_score = score
+                    best_params = {'lr': lr, 'epochs': epochs, 'batch_size': batch_size}
+    return best_params, best_score
+
+
+def tune_hmm(returns, n_states_list=None):
+    if n_states_list is None:
+        n_states_list = [2, 3, 4]
+    best_score = -np.inf
+    best_n = None
+    for n in n_states_list:
+        hmm = HMMModel(n_states=n)
+        hmm.train(returns)
+        # Use BIC for scoring
+        log_likelihood = hmm.model.score(returns)
+        bic = -2 * log_likelihood + n * np.log(len(returns))
+        score = -bic  # Lower BIC is better, so negate
+        if score > best_score:
+            best_score = score
+            best_n = n
+    return best_n
+
+
 def main(args):
     os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -95,6 +147,15 @@ def main(args):
     if X.shape[0] == 0:
         raise ValueError("Not enough data to build a sequence dataset. Increase limit or reduce seq_len.")
 
+    # Hyperparameter tuning
+    print("Tuning hyperparameters...")
+    best_nn_params, best_nn_score = tune_nn_hyperparams(X, y, args.seq_len, args.device)
+    print(f"Best NN params: {best_nn_params}, CV score: {best_nn_score:.4f}")
+
+    train_returns = df["returns"].values[:len(X) + args.seq_len - 1]
+    best_hmm_n = tune_hmm(train_returns)
+    print(f"Best HMM n_states: {best_hmm_n}")
+
     X_train, X_test, y_train, y_test = train_test_split_sequences(X, y, test_size=args.test_size)
     scaler = FeatureScaler()
     scaler.fit(X_train)
@@ -103,8 +164,7 @@ def main(args):
     scaler.save(SCALER_PATH)
     print(f"Saved feature scaler to {SCALER_PATH}")
 
-    train_returns = df["returns"].values[: len(X_train) + args.seq_len - 1]
-    hmm = HMMModel(n_states=args.hmm_states)
+    hmm = HMMModel(n_states=best_hmm_n)
     hmm.train(train_returns)
     hmm.save(HMM_PATH)
     print(f"Saved HMM model to {HMM_PATH}")
@@ -114,9 +174,9 @@ def main(args):
         nn,
         X_train_scaled,
         y_train,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
+        epochs=best_nn_params['epochs'],
+        batch_size=best_nn_params['batch_size'],
+        lr=best_nn_params['lr'],
         device=args.device,
     )
     nn.save(NN_PATH)
@@ -126,9 +186,11 @@ def main(args):
     print(f"Evaluation on {len(X_test)} test samples: MSE={mse:.6f}, directional_accuracy={direction:.4f}")
     # Save training status
     current_metrics = metrics.load_metrics()
-    current_metrics["training_status"] = "Trained"
+    current_metrics["training_status"] = "Trained and evaluated with CV and tuning"
     current_metrics["mse"] = float(mse)
     current_metrics["directional_accuracy"] = float(direction * 100)  # Convert to percentage
+    current_metrics["cv_directional_accuracy"] = float(best_nn_score * 100)
+    current_metrics["best_hmm_states"] = best_hmm_n
     metrics.save_metrics(current_metrics)
 
 if __name__ == "__main__":

@@ -62,3 +62,32 @@ class SignalPipeline:
             "prediction": float(prediction),
             "signal": signal
         }
+
+    def live_run(self, symbol="BTCUSDT"):
+        # Fetch recent data for live signal
+        df = self.client.get_klines(symbol=symbol, limit=100)
+        df = create_features(df)
+
+        returns = df["returns"].values
+        if not os.path.exists(HMM_PATH):
+            self.hmm.train(returns)
+
+        regime = self.hmm.predict_regime(returns)
+
+        features = self._prepare_features(df)
+        self.nn.eval()
+        with torch.no_grad():
+            prediction = self.nn(features).item()
+        signal = generate_signal(int(regime), float(prediction), self.hmm.state_means)
+
+        timestamp_value = df["timestamp"].iloc[-1] if not df.empty else None
+        if hasattr(timestamp_value, "item"):
+            timestamp_value = timestamp_value.item()
+
+        return {
+            "symbol": symbol,
+            "regime": int(regime),
+            "prediction": float(prediction),
+            "signal": signal,
+            "timestamp": int(timestamp_value) if timestamp_value is not None else None
+        }

@@ -45,6 +45,29 @@ def compute_strategy_returns(signals, next_returns):
     return strategy_returns
 
 
+def compute_sharpe_ratio(returns, risk_free_rate=0.0):
+    if len(returns) == 0 or np.std(returns) == 0:
+        return 0.0
+    excess_returns = returns - risk_free_rate
+    return np.mean(excess_returns) / np.std(excess_returns) * np.sqrt(8760)  # Annualize for hourly data
+
+
+def compute_max_drawdown(returns):
+    if len(returns) == 0:
+        return 0.0
+    cumulative = np.cumprod(1 + returns)
+    peak = np.maximum.accumulate(cumulative)
+    drawdown = (cumulative - peak) / peak
+    return np.min(drawdown)
+
+
+def compute_win_loss_ratio(signals, strategy_returns):
+    trades = [r for r, s in zip(strategy_returns, signals) if s != "HOLD"]
+    wins = sum(1 for r in trades if r > 0)
+    losses = sum(1 for r in trades if r < 0)
+    return wins / losses if losses > 0 else float('inf') if wins > 0 else 0.0
+
+
 def evaluate(predictions, targets):
     mse = float(np.mean((predictions - targets) ** 2))
     directional = float((np.sign(predictions.flatten()) == np.sign(targets.flatten())).mean())
@@ -93,6 +116,13 @@ def main(args):
     print(f"Strategy cumulative return: {strategy:.6f}, buy-hold cumulative return: {buy_hold:.6f}")
     print(f"Signal counts: BUY={signals.count('BUY')}, SELL={signals.count('SELL')}, HOLD={signals.count('HOLD')}")
 
+    # Additional metrics
+    sharpe = compute_sharpe_ratio(strategy_returns)
+    max_dd = compute_max_drawdown(strategy_returns)
+    win_loss = compute_win_loss_ratio(signals, strategy_returns)
+    total_trades = sum(1 for s in signals if s != "HOLD")
+    print(f"Sharpe ratio: {sharpe:.4f}, Max drawdown: {max_dd:.4f}, Win/Loss ratio: {win_loss:.4f}, Total trades: {total_trades}")
+
     # Save metrics for dashboard
     metrics_data = {
         "training_status": "Trained and evaluated",
@@ -100,6 +130,10 @@ def main(args):
         "directional_accuracy": float(directional * 100),  # Convert to percentage
         "cumulative_return": float(strategy * 100),  # Convert to percentage
         "buy_hold_return": float(buy_hold * 100),  # Convert to percentage
+        "sharpe_ratio": float(sharpe),
+        "max_drawdown": float(max_dd * 100),  # Convert to percentage
+        "win_loss_ratio": float(win_loss),
+        "total_trades": total_trades,
         "signal_counts": {
             "BUY": signals.count("BUY"),
             "SELL": signals.count("SELL"),

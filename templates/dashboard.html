@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Signal Engine - Bhalisa's Dev Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .metric { margin: 10px 0; }
         .metric label { font-weight: bold; display: inline-flex; align-items: center; gap: 8px; }
         .metric span { margin-left: 10px; }
-        .section { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        .section { border: 1px solid #030003; padding: 10px; margin: 10px 0; }
         .info-icon { 
             display: inline-flex; 
             align-items: center; 
@@ -35,6 +36,28 @@
         <p>{{ metrics.training_status }} 
             <span class="info-icon" title="Shows whether the HMM and LSTM models have been trained on historical data">i</span>
         </p>
+        {% if metrics.best_hmm_states %}
+        <p>Best HMM States: {{ metrics.best_hmm_states }}
+            <span class="info-icon" title="Optimal number of hidden states for the HMM model, determined via tuning">i</span>
+        </p>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h2>Live Signal</h2>
+        <form id="signal-form">
+            <label for="symbol">Symbol:</label>
+            <input type="text" id="symbol" value="BTCUSDT" required>
+            <button type="submit">Get Live Signal</button>
+        </form>
+        <div id="live-signal-result" style="margin-top: 10px;">
+            <p>Loading live signal...</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Price Chart</h2>
+        <canvas id="priceChart" width="400" height="200"></canvas>
     </div>
 
     <div class="section">
@@ -53,6 +76,15 @@
             </label>
             <span>{{ "%.2f"|format(metrics.directional_accuracy) }}%</span>
         </div>
+        {% if metrics.cv_directional_accuracy %}
+        <div class="metric">
+            <label>
+                CV Directional Accuracy
+                <span class="info-icon" title="Directional accuracy from cross-validation, indicating model's generalization ability. Higher is better for robustness.">i</span>
+            </label>
+            <span>{{ "%.2f"|format(metrics.cv_directional_accuracy) }}%</span>
+        </div>
+        {% endif %}
     </div>
 
     <div class="section">
@@ -71,6 +103,33 @@
             </label>
             <span>{{ "%.2f"|format(metrics.buy_hold_return) }}%</span>
         </div>
+        {% if metrics.sharpe_ratio %}
+        <div class="metric">
+            <label>
+                Sharpe Ratio
+                <span class="info-icon" title="Risk-adjusted return measure. Higher values indicate better return per unit of risk. Values above 1 are generally considered good.">i</span>
+            </label>
+            <span>{{ "%.2f"|format(metrics.sharpe_ratio) }}</span>
+        </div>
+        {% endif %}
+        {% if metrics.max_drawdown %}
+        <div class="metric">
+            <label>
+                Max Drawdown
+                <span class="info-icon" title="Maximum peak-to-trough decline in strategy value. Lower (less negative) is better, indicating less severe losses.">i</span>
+            </label>
+            <span>{{ "%.2f"|format(metrics.max_drawdown) }}%</span>
+        </div>
+        {% endif %}
+        {% if metrics.win_loss_ratio %}
+        <div class="metric">
+            <label>
+                Win/Loss Ratio
+                <span class="info-icon" title="Ratio of winning trades to losing trades. Values above 1 indicate more wins than losses. Higher is better for strategy reliability.">i</span>
+            </label>
+            <span>{{ "%.2f"|format(metrics.win_loss_ratio) }}</span>
+        </div>
+        {% endif %}
         <div class="metric">
             <label>
                 Signal Counts
@@ -78,6 +137,15 @@
             </label>
             <span>BUY: {{ metrics.signal_counts['BUY'] }}, SELL: {{ metrics.signal_counts['SELL'] }}, HOLD: {{ metrics.signal_counts['HOLD'] }}</span>
         </div>
+        {% if metrics.total_trades %}
+        <div class="metric">
+            <label>
+                Total Trades
+                <span class="info-icon" title="Number of actual trades (BUY or SELL signals). Excludes HOLD signals. Indicates trading frequency.">i</span>
+            </label>
+            <span>{{ metrics.total_trades }}</span>
+        </div>
+        {% endif %}
     </div>
 
     <div class="section">
@@ -89,4 +157,69 @@
         </ul>
     </div>
 </body>
+<script>
+    const signalForm = document.getElementById('signal-form');
+    const liveSignalResult = document.getElementById('live-signal-result');
+
+    async function fetchLiveSignal(symbol) {
+        try {
+            const response = await fetch(`/live-signal/${symbol}`);
+            const data = await response.json();
+            liveSignalResult.innerHTML = `
+                <p><strong>Symbol:</strong> ${data.symbol}</p>
+                <p><strong>Regime:</strong> ${data.regime}</p>
+                <p><strong>Prediction:</strong> ${data.prediction.toFixed(6)}</p>
+                <p><strong>Signal:</strong> <span style="color: ${data.signal === 'BUY' ? 'green' : data.signal === 'SELL' ? 'red' : 'gray'};">${data.signal}</span></p>
+                <p><strong>Timestamp:</strong> ${data.timestamp || 'N/A'}</p>
+            `;
+        } catch (error) {
+            liveSignalResult.innerHTML = `<p>Error fetching live signal: ${error.message}</p>`;
+        }
+    }
+
+    signalForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const symbol = document.getElementById('symbol').value.toUpperCase();
+        fetchLiveSignal(symbol);
+    });
+
+    // Auto-fetch on load and poll every 60 seconds
+    fetchLiveSignal('BTCUSDT');
+    setInterval(() => {
+        const symbol = document.getElementById('symbol').value.toUpperCase();
+        fetchLiveSignal(symbol);
+    }, 60000);
+
+    // Load price chart
+    async function loadPriceChart(symbol) {
+        try {
+            const response = await fetch(`/price-data/${symbol}`);
+            const data = await response.json();
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.timestamps.map(ts => new Date(ts).toLocaleTimeString()),
+                    datasets: [{
+                        label: `${symbol} Price`,
+                        data: data.prices,
+                        borderColor: 'blue',
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { display: true },
+                        y: { display: true }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error loading chart:', error);
+        }
+    }
+
+    loadPriceChart('BTCUSDT');
+</script>
 </html>

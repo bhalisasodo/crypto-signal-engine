@@ -36,3 +36,21 @@ python evaluate.py --data-path data.csv --seq-len 20
 
 ## Endpoint
 GET /signal/{symbol}
+
+## Testing
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+## Docker
+Build and run with Docker:
+```bash
+docker build -t crypto-signal-engine .
+docker run -p 8000:8000 crypto-signal-engine
+```
+
+Or with Docker Compose:
+```bash
+docker compose up --build
+```
