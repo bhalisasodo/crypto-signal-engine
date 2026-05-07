@@ -6,3 +6,4 @@ torch
 hmmlearn
 scikit-learn
 python-binance
+joblib
