@@ -55,12 +55,35 @@ class SignalPipeline:
         features = self._prepare_features(df)
         prediction = self.nn(features).item()
         signal = generate_signal(regime, prediction)
+        latest_row = df.iloc[-1]
+        current_price = float(latest_row["close"])
+        ma_fast = float(latest_row["ma_fast"])
+        ma_slow = float(latest_row["ma_slow"])
+        volatility = float(latest_row["volatility"])
+        regime_mean = float(self.hmm.state_means[regime]) if hasattr(self.hmm, "state_means") and len(self.hmm.state_means) > regime else 0.0
+        confidence = abs(prediction)
+        prediction_pct = float(prediction * 100)
+        confidence_pct = float(confidence * 100)
+        regime_mean_pct = float(regime_mean * 100)
+        volatility_pct = float(volatility * 100)
 
         return {
             "symbol": symbol,
             "regime": int(regime),
+            "regime_mean": regime_mean,
+            "regime_mean_pct": regime_mean_pct,
             "prediction": float(prediction),
-            "signal": signal
+            "prediction_pct": prediction_pct,
+            "signal": signal,
+            "confidence": float(confidence),
+            "confidence_pct": confidence_pct,
+            "timestamp": int(latest_row["timestamp"]),
+            "current_price": current_price,
+            "volatility": volatility,
+            "volatility_pct": volatility_pct,
+            "ma_fast": ma_fast,
+            "ma_slow": ma_slow,
+            "trend_bias": "Bullish" if ma_fast > ma_slow else "Bearish"
         }
 
     def live_run(self, symbol="BTCUSDT"):
@@ -79,6 +102,17 @@ class SignalPipeline:
         with torch.no_grad():
             prediction = self.nn(features).item()
         signal = generate_signal(int(regime), float(prediction), self.hmm.state_means)
+        latest_row = df.iloc[-1]
+        current_price = float(latest_row["close"])
+        ma_fast = float(latest_row["ma_fast"])
+        ma_slow = float(latest_row["ma_slow"])
+        volatility = float(latest_row["volatility"])
+        regime_mean = float(self.hmm.state_means[regime]) if hasattr(self.hmm, "state_means") and len(self.hmm.state_means) > regime else 0.0
+        confidence = abs(prediction)
+        prediction_pct = float(prediction * 100)
+        confidence_pct = float(confidence * 100)
+        regime_mean_pct = float(regime_mean * 100)
+        volatility_pct = float(volatility * 100)
 
         timestamp_value = df["timestamp"].iloc[-1] if not df.empty else None
         if hasattr(timestamp_value, "item"):
@@ -87,7 +121,18 @@ class SignalPipeline:
         return {
             "symbol": symbol,
             "regime": int(regime),
+            "regime_mean": regime_mean,
+            "regime_mean_pct": regime_mean_pct,
             "prediction": float(prediction),
+            "prediction_pct": prediction_pct,
             "signal": signal,
-            "timestamp": int(timestamp_value) if timestamp_value is not None else None
+            "confidence": float(confidence),
+            "confidence_pct": confidence_pct,
+            "timestamp": int(timestamp_value) if timestamp_value is not None else None,
+            "current_price": current_price,
+            "volatility": volatility,
+            "volatility_pct": volatility_pct,
+            "ma_fast": ma_fast,
+            "ma_slow": ma_slow,
+            "trend_bias": "Bullish" if ma_fast > ma_slow else "Bearish"
         }

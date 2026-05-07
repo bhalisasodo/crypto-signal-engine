@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 from pipelines.signal_pipeline import SignalPipeline
+from pipelines.telegram_notifier import send_trading_signal
 import metrics
 import logging
 
@@ -10,15 +11,33 @@ router = APIRouter()
 pipeline = SignalPipeline()
 templates = Jinja2Templates(directory="templates")
 
+def _attach_model_metrics(signal_data: dict):
+    current_metrics = metrics.load_metrics()
+    accuracy = current_metrics.get("directional_accuracy")
+    cv_accuracy = current_metrics.get("cv_directional_accuracy")
+    if accuracy is not None:
+        signal_data["directional_accuracy"] = float(accuracy)
+    if cv_accuracy is not None:
+        signal_data["cv_directional_accuracy"] = float(cv_accuracy)
+    return signal_data
+
 @router.get("/signal/{symbol}")
 def get_signal(symbol: str):
     logger.info(f"Generating signal for {symbol}")
-    return pipeline.run(symbol.upper())
+    signal_data = pipeline.run(symbol.upper())
+    signal_data = _attach_model_metrics(signal_data)
+    # Send signal to Telegram
+    send_trading_signal(signal_data)
+    return signal_data
 
 @router.get("/live-signal/{symbol}")
 def get_live_signal(symbol: str):
     logger.info(f"Generating live signal for {symbol}")
-    return pipeline.live_run(symbol.upper())
+    signal_data = pipeline.live_run(symbol.upper())
+    signal_data = _attach_model_metrics(signal_data)
+    # Send signal to Telegram
+    send_trading_signal(signal_data)
+    return signal_data
 
 @router.get("/")
 def root():

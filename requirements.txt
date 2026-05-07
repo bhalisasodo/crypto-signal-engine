@@ -8,3 +8,6 @@ scikit-learn
 python-binance
 joblib
 jinja2
+python-telegram-bot
+python-dotenv
+apscheduler

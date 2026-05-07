@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Signal Engine - Bhalisa's Dev Dashboard</title>
+    <title>FlowAlpha Signals - Bhalisa's Dev Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
@@ -29,7 +29,7 @@
     </style>
 </head>
 <body>
-    <h1>Crypto Signal Engine - Bhalisa's Dev Dashboard</h1>
+    <h1>FlowAlpha Signals - Bhalisa's Dev Dashboard</h1>
 
     <div class="section">
         <h2>Training Status</h2>
@@ -44,6 +44,16 @@
     </div>
 
     <div class="section">
+        <h2>Real-Time Signals</h2>
+        <p>✅ <strong>Active:</strong> Signals generated every 5 minutes, sent only when changed</p>
+        <p>📊 <strong>Symbol:</strong> BTCUSDT (configurable in code)</p>
+        <p>🔄 <strong>Smart sending:</strong> Only notifies when BUY ↔ SELL ↔ HOLD changes</p>
+        <p style="font-size: 0.95em; color: #666; margin-top: 8px;">
+            Manual signals via API endpoints still work and respect duplicate suppression.
+        </p>
+    </div>
+
+    <div class="section">
         <h2>Live Signal</h2>
         <form id="signal-form">
             <label for="symbol">Symbol:</label>
@@ -53,10 +63,12 @@
         <div id="live-signal-result" style="margin-top: 10px;">
             <p>Loading live signal...</p>
         </div>
+        <p style="font-size: 0.95em; color: #555; margin-top: 8px;">
+            Tip: Hover the <span class="info-icon" title="Signal labels and raw values include explanatory context to help traders understand each indicator">i</span> icons for field definitions.</p>
     </div>
 
     <div class="section">
-        <h2>Price Chart</h2>
+        <h2>Price Chart <span class="info-icon" title="Plots recent symbol prices for visual trend context and signal verification">i</span></h2>
         <canvas id="priceChart" width="400" height="200"></canvas>
     </div>
 
@@ -166,11 +178,17 @@
             const response = await fetch(`/live-signal/${symbol}`);
             const data = await response.json();
             liveSignalResult.innerHTML = `
-                <p><strong>Symbol:</strong> ${data.symbol}</p>
-                <p><strong>Regime:</strong> ${data.regime}</p>
-                <p><strong>Prediction:</strong> ${data.prediction.toFixed(6)}</p>
-                <p><strong>Signal:</strong> <span style="color: ${data.signal === 'BUY' ? 'green' : data.signal === 'SELL' ? 'red' : 'gray'};">${data.signal}</span></p>
-                <p><strong>Timestamp:</strong> ${data.timestamp || 'N/A'}</p>
+                <p><strong>Symbol:</strong> ${data.symbol} <span class="info-icon" title="Trading symbol used for the live signal call">i</span></p>
+                <p><strong>Action:</strong> <span style="color: ${data.signal === 'BUY' ? 'green' : data.signal === 'SELL' ? 'red' : 'gray'};">${data.signal}</span> <span class="info-icon" title="Trading recommendation generated from current regime and prediction">i</span></p>
+                <p><strong>Estimated Move:</strong> ${data.prediction_pct !== undefined ? (data.prediction_pct >= 0 ? '+' : '') + data.prediction_pct.toFixed(2) + '%' : data.prediction.toFixed(6)} <span class="info-icon" title="Predicted move magnitude from the model expressed as a percentage">i</span></p>
+                <p><strong>Confidence:</strong> ${data.confidence_pct !== undefined ? data.confidence_pct.toFixed(2) + '%' : Math.abs(data.prediction).toFixed(6)} <span class="info-icon" title="Model confidence based on signal strength; higher values mean stronger signals">i</span></p>
+                <p><strong>Market Regime:</strong> ${data.regime} <span class="info-icon" title="Hidden Markov Model regime state based on recent asset returns">i</span></p>
+                <p><strong>Regime Strength:</strong> ${data.regime_mean_pct !== undefined ? (data.regime_mean_pct >= 0 ? '+' : '') + data.regime_mean_pct.toFixed(2) + '%' : data.regime_mean} <span class="info-icon" title="Average return for the current regime, indicating regime momentum">i</span></p>
+                <p><strong>Trend Bias:</strong> ${data.trend_bias} <span class="info-icon" title="Bullish/Bearish bias based on the fast and slow moving averages">i</span></p>
+                <p><strong>Volatility:</strong> ${data.volatility_pct !== undefined ? data.volatility_pct.toFixed(2) + '%' : data.volatility.toFixed(6)} <span class="info-icon" title="Recent price volatility measured as standard deviation of returns; lower is more stable">i</span></p>
+                <p><strong>Model Accuracy:</strong> ${data.directional_accuracy !== undefined ? data.directional_accuracy.toFixed(2) + '%' : 'N/A'} <span class="info-icon" title="Directional accuracy from the latest training run, showing the model's historical hit rate">i</span></p>
+                <p><strong>CV Accuracy:</strong> ${data.cv_directional_accuracy !== undefined ? data.cv_directional_accuracy.toFixed(2) + '%' : 'N/A'} <span class="info-icon" title="Cross-validated directional accuracy, showing how well the model generalizes to unseen data">i</span></p>
+                <p><strong>Timestamp:</strong> ${data.timestamp || 'N/A'} <span class="info-icon" title="Time of the most recent candle used for signal generation">i</span></p>
             `;
         } catch (error) {
             liveSignalResult.innerHTML = `<p>Error fetching live signal: ${error.message}</p>`;
