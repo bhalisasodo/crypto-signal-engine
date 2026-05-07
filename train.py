@@ -12,6 +12,7 @@ from data.processing.feature_engineering import create_features
 from data.processing.scaler import FeatureScaler
 from models.hmm_model import HMMModel
 from models.nn_model import PricePredictor
+import metrics
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 HMM_PATH = os.path.join(MODEL_DIR, "hmm_model.pkl")
@@ -123,7 +124,12 @@ def main(args):
 
     mse, direction = evaluate_model(nn, scaler, X_test, y_test, device=args.device)
     print(f"Evaluation on {len(X_test)} test samples: MSE={mse:.6f}, directional_accuracy={direction:.4f}")
-
+    # Save training status
+    current_metrics = metrics.load_metrics()
+    current_metrics["training_status"] = "Trained"
+    current_metrics["mse"] = float(mse)
+    current_metrics["directional_accuracy"] = float(direction * 100)  # Convert to percentage
+    metrics.save_metrics(current_metrics)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train HMM and NN models for the crypto signal engine.")

@@ -11,6 +11,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+Visit `http://localhost:8000/dashboard` for the UI dashboard.
+
 ## Training
 ```bash
 python train.py --symbol BTCUSDT --interval 1h --limit 1000 --seq-len 20 --epochs 20

@@ -1,0 +1,1 @@
+{"training_status": "Trained and evaluated", "mse": 1.462882210034877e-06, "directional_accuracy": 88.95833333333333, "cumulative_return": 133.1617604154857, "buy_hold_return": 22.03928546233823, "signal_counts": {"BUY": 507, "SELL": 0, "HOLD": 453}}

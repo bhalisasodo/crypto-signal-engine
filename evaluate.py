@@ -12,6 +12,7 @@ from data.processing.scaler import FeatureScaler
 from models.ensemble import generate_signal
 from models.hmm_model import HMMModel
 from models.nn_model import PricePredictor
+import metrics
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 HMM_PATH = os.path.join(MODEL_DIR, "hmm_model.pkl")
@@ -91,6 +92,21 @@ def main(args):
     strategy = np.nansum(strategy_returns)
     print(f"Strategy cumulative return: {strategy:.6f}, buy-hold cumulative return: {buy_hold:.6f}")
     print(f"Signal counts: BUY={signals.count('BUY')}, SELL={signals.count('SELL')}, HOLD={signals.count('HOLD')}")
+
+    # Save metrics for dashboard
+    metrics_data = {
+        "training_status": "Trained and evaluated",
+        "mse": mse,
+        "directional_accuracy": float(directional * 100),  # Convert to percentage
+        "cumulative_return": float(strategy * 100),  # Convert to percentage
+        "buy_hold_return": float(buy_hold * 100),  # Convert to percentage
+        "signal_counts": {
+            "BUY": signals.count("BUY"),
+            "SELL": signals.count("SELL"),
+            "HOLD": signals.count("HOLD")
+        }
+    }
+    metrics.save_metrics(metrics_data)
 
 
 if __name__ == "__main__":
