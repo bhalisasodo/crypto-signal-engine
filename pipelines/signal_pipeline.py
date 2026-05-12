@@ -26,6 +26,10 @@ class SignalPipeline:
         if os.path.exists(SCALER_PATH):
             self.scaler = FeatureScaler.load(SCALER_PATH)
 
+        # Risk parameters
+        self.sl_multiplier = 1.5
+        self.tp_multiplier = 3.0
+
     def _prepare_features(self, df):
         features = df[["returns", "volatility", "ma_fast", "ma_slow"]].values[-self.nn.seq_len:]
         if features.shape[0] < self.nn.seq_len:
@@ -41,6 +45,22 @@ class SignalPipeline:
             features = self.scaler.transform(features)
 
         return torch.tensor(features, dtype=torch.float32).view(1, self.nn.seq_len, self.nn.input_size)
+
+    def _calculate_risk_levels(self, signal, entry_price, volatility):
+        if signal == "HOLD":
+            return None, None
+
+        sl_distance = entry_price * volatility * self.sl_multiplier
+        tp_distance = entry_price * volatility * self.tp_multiplier
+
+        if signal == "BUY":
+            sl = entry_price - sl_distance
+            tp = entry_price + tp_distance
+        else:  # SELL
+            sl = entry_price + sl_distance
+            tp = entry_price - tp_distance
+
+        return float(sl), float(tp)
 
     def run(self, symbol="BTCUSDT"):
         df = self.client.get_klines(symbol=symbol)
@@ -67,6 +87,8 @@ class SignalPipeline:
         regime_mean_pct = float(regime_mean * 100)
         volatility_pct = float(volatility * 100)
 
+        sl, tp = self._calculate_risk_levels(signal, current_price, volatility)
+
         return {
             "symbol": symbol,
             "regime": int(regime),
@@ -83,7 +105,9 @@ class SignalPipeline:
             "volatility_pct": volatility_pct,
             "ma_fast": ma_fast,
             "ma_slow": ma_slow,
-            "trend_bias": "Bullish" if ma_fast > ma_slow else "Bearish"
+            "trend_bias": "Bullish" if ma_fast > ma_slow else "Bearish",
+            "stop_loss": sl,
+            "take_profit": tp
         }
 
     def live_run(self, symbol="BTCUSDT"):
@@ -118,6 +142,8 @@ class SignalPipeline:
         if hasattr(timestamp_value, "item"):
             timestamp_value = timestamp_value.item()
 
+        sl, tp = self._calculate_risk_levels(signal, current_price, volatility)
+
         return {
             "symbol": symbol,
             "regime": int(regime),
@@ -134,5 +160,7 @@ class SignalPipeline:
             "volatility_pct": volatility_pct,
             "ma_fast": ma_fast,
             "ma_slow": ma_slow,
-            "trend_bias": "Bullish" if ma_fast > ma_slow else "Bearish"
+            "trend_bias": "Bullish" if ma_fast > ma_slow else "Bearish",
+            "stop_loss": sl,
+            "take_profit": tp
         }

@@ -81,6 +81,8 @@ class TelegramNotifier:
         trend_bias = signal_data.get("trend_bias", "N/A")
         confidence_pct = signal_data.get("confidence_pct")
         timestamp = signal_data.get("timestamp")
+        stop_loss = signal_data.get("stop_loss")
+        take_profit = signal_data.get("take_profit")
         directional_accuracy = signal_data.get("directional_accuracy")
         cv_directional_accuracy = signal_data.get("cv_directional_accuracy")
 
@@ -106,6 +108,8 @@ class TelegramNotifier:
         accuracy_text = (
             f"{directional_accuracy:.2f}%" if directional_accuracy is not None else "N/A"
         )
+        sl_text = f"${stop_loss:,.2f}" if stop_loss is not None else "N/A"
+        tp_text = f"${take_profit:,.2f}" if take_profit is not None else "N/A"
         cv_accuracy_text = (
             f"{cv_directional_accuracy:.2f}%" if cv_directional_accuracy is not None else None
         )
@@ -124,8 +128,11 @@ class TelegramNotifier:
         )
         if cv_accuracy_text is not None:
             message += f"<b>CV Accuracy:</b> {cv_accuracy_text}\n"
+        
         message += (
             f"<b>Price:</b> {price_text}\n"
+            f"<b>Stop Loss:</b> {sl_text}\n"
+            f"<b>Take Profit:</b> {tp_text}\n"
             f"<b>Timestamp:</b> {timestamp_text}\n\n"
             f"💡 <i>FlowAlpha Signals</i>"
         )
